@@ -3,7 +3,7 @@ FROM rustlang/rust:nightly-bullseye-slim AS builder
 WORKDIR /app/fuizu
 COPY . . 
 
-RUN cargo install --path fuizu-server
+RUN cargo install --path crates/fuizu-server
 
 FROM debian:bullseye-slim
 
