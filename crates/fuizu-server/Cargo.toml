@@ -1,0 +1,54 @@
+[package]
+name = "fuizu-server"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+color-eyre = "0.6.3"
+nats-util = { path = "../nats-util" }
+
+async-nats = { version = "0.40", default-features = false, features = [
+    "server_2_10",
+    "server_2_11",
+    "aws-lc-rs",
+] }
+
+####### async/await
+
+tokio = { version = "1.44", features = [
+    "rt",
+    "sync",
+    "rt-multi-thread",
+    "signal",
+] }
+futures-util = "0.3.30"
+
+####### serde
+
+serde_json = "1.0.116"
+
+####### eara
+
+fuizu-protocol = { path = "../fuizu-protocol" }
+
+####### tracing
+
+tracing = "0.1"
+tracing-subscriber = "0.3"
+
+####### twilight
+
+[dependencies.twilight-http]
+git = "https://github.com/eara-bot/twilight.git"
+branch = "eara"
+default-features = false
+features = ["simd-json"]
+
+[dependencies.twilight-gateway-queue]
+git = "https://github.com/eara-bot/twilight.git"
+branch = "eara"
+default-features = false
+features = []
+
+[lints]
+workspace = true

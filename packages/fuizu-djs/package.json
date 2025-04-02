@@ -1,0 +1,25 @@
+{
+  "name": "@keia/fuizu-discord.js",
+  "version": "0.0.0-alpha.1",
+  "description": "A discord.js client for the Fuizu identify queue",
+  "packageManager": "pnpm@10.5.2",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist",
+    "!dist/.tsbuildinfo"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "prepublishOnly": "pnpm run build"
+  },
+  "devDependencies": {
+    "@types/node": "^22.13.17",
+    "typescript": "^5.8.2"
+  },
+  "dependencies": {
+    "@discordjs/ws": "^2.0.1",
+    "@vladfrangu/async_event_emitter": "^2.4.6",
+    "nats": "^2.29.3"
+  }
+}

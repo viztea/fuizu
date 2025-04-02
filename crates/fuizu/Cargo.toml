@@ -1,0 +1,30 @@
+[package]
+name = "fuizu"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+thiserror = "2"
+tokio = { version = "1.44", default-features = false, features = ["sync"] }
+futures-util = "0.3.30"
+serde = { version = "1.0.200", features = ["derive", "std"] }
+tracing = "0.1"
+async-trait = "0.1"
+
+#
+fuizu-protocol = { path = "../fuizu-protocol" }
+
+# twilight
+twilight-gateway-queue = { version = "0.16", optional = true, default-features = false }
+
+# nats
+serde_json = { version = "1.0.116", optional = true }
+async-nats = { version = "0.40", optional = true }
+bytes = { version = "1.10", optional = true }
+
+[features]
+nats = ["async-nats", "bytes", "serde_json"]
+twilight = ["twilight-gateway-queue"]
+
+[lints]
+workspace = true
