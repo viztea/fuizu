@@ -1,6 +1,6 @@
 {
   "name": "@keia/fuizu-discord.js",
-  "version": "0.0.0-alpha.1",
+  "version": "0.0.0-alpha.4",
   "description": "A discord.js client for the Fuizu identify queue",
   "packageManager": "pnpm@10.5.2",
   "main": "dist/index.js",
@@ -18,8 +18,11 @@
     "typescript": "^5.8.2"
   },
   "dependencies": {
-    "@discordjs/ws": "^2.0.1",
     "@vladfrangu/async_event_emitter": "^2.4.6",
+    "discord-api-types": "^0.37.119",
     "nats": "^2.29.3"
+  },
+  "peerDependencies": {
+    "@discordjs/ws": "^1.2.1"
   }
 }

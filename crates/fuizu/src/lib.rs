@@ -5,7 +5,7 @@ pub mod twilight;
 use std::collections::BTreeMap;
 
 use async_trait::async_trait;
-use fuizu_protocol::{IdentifyAllowance, IdentifyRequest};
+use fuizu_protocol::{IdentifyAllowance, Request};
 use tokio::sync::{mpsc, oneshot};
 
 #[derive(Debug, Clone)]
@@ -29,7 +29,7 @@ pub trait Transport: Send + Sync {
     type Error: std::error::Error + Send + Sync;
 
     /// Send an identification request.
-    async fn send(&self, message: IdentifyRequest) -> Result<(), Self::Error>;
+    async fn send(&self, message: Request) -> Result<(), Self::Error>;
 
     /// Receive an allowance message.
     async fn recv(&mut self) -> Result<Option<IdentifyAllowance>, Self::Error>;
@@ -50,7 +50,7 @@ impl<T: Transport> Inner<T> {
     async fn handle_request(&self, request: QueuedIdentify, requests: &mut RequestMap) {
         if let Err(err) = self
             .transport
-            .send(IdentifyRequest { id: request.id, host_name: self.host_name.clone() })
+            .send(Request::Identify { id: request.id, host_name: self.host_name.clone() })
             .await
         {
             tracing::error!(%err, shard_id=request.id, "Failed to send identify request");

@@ -1,0 +1,10 @@
+target/
+node_modules/
+packages/
+
+README.md
+docker-compose.yml
+
+pnpm*
+
+.github

@@ -38,17 +38,9 @@ tracing-subscriber = "0.3"
 
 ####### twilight
 
-[dependencies.twilight-http]
-git = "https://github.com/eara-bot/twilight.git"
-branch = "eara"
-default-features = false
-features = ["simd-json"]
-
-[dependencies.twilight-gateway-queue]
-git = "https://github.com/eara-bot/twilight.git"
-branch = "eara"
-default-features = false
-features = []
+twilight-model = "0.16"
+twilight-http = "0.16"
+twilight-gateway-queue = "0.16"
 
 [lints]
 workspace = true

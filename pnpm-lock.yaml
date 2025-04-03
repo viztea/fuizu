@@ -9,8 +9,8 @@ importers:
   packages/fuizu-djs:
     dependencies:
       '@discordjs/ws':
-        specifier: ^2.0.1
-        version: 2.0.1
+        specifier: dev
+        version: 3.0.0-dev.1743336297-432aba3df
       '@vladfrangu/async_event_emitter':
         specifier: ^2.4.6
         version: 2.4.6
@@ -39,9 +39,9 @@ packages:
     resolution: {integrity: sha512-eddz6UnOBEB1oITPinyrB2Pttej49M9FZQY8NxgEvc3tq6ZICZ19m70RsmzRdDHk80O9NoYN/25AqJl8vPVf/g==}
     engines: {node: '>=18'}
 
-  '@discordjs/ws@2.0.1':
-    resolution: {integrity: sha512-5etVbXdwThIT5+KfU+uiBh358Ql58f2vf1W9B5ZXxaZuIlpiX/VC/G0Lr/xuEcs6cL+/HZtEIUf0p9dQfEDang==}
-    engines: {node: '>=20'}
+  '@discordjs/ws@3.0.0-dev.1743336297-432aba3df':
+    resolution: {integrity: sha512-eLVWS0wDbTFQBTGEw3BBKMnxLm/jb3Czfts8wsCN/1c7NKewVWANdTs0AzKXgBpjNBPkTdsk9Vg211bfTOLQ9A==}
+    engines: {node: '>=22.12.0'}
 
   '@sapphire/async-queue@1.5.5':
     resolution: {integrity: sha512-cvGzxbba6sav2zZkH8GPf2oGk9yYoD5qrNWdu9fRehifgnFZJMV+nuy2nON2roRO4yQQ+v7MK/Pktl/HgfsUXg==}
@@ -123,7 +123,7 @@ snapshots:
 
   '@discordjs/util@1.1.1': {}
 
-  '@discordjs/ws@2.0.1':
+  '@discordjs/ws@3.0.0-dev.1743336297-432aba3df':
     dependencies:
       '@discordjs/collection': 2.1.1
       '@discordjs/rest': 2.4.3

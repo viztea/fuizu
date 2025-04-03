@@ -1,7 +1,7 @@
 use async_nats::subject::ToSubject;
 use async_nats::{Client, Subject, SubscribeError, Subscriber};
 use async_trait::async_trait;
-use fuizu_protocol::{IdentifyAllowance, IdentifyRequest};
+use fuizu_protocol::{IdentifyAllowance, Request};
 use futures_util::StreamExt;
 use thiserror::Error;
 
@@ -44,7 +44,7 @@ impl Transport for NatsTransport {
     type Error = NatsError;
 
     /// Send an identification request.
-    async fn send(&self, message: IdentifyRequest) -> Result<(), Self::Error> {
+    async fn send(&self, message: Request) -> Result<(), Self::Error> {
         let message = serde_json::to_vec(&message)?;
         self.client
             .publish(self.request_subject.clone(), message.into())
