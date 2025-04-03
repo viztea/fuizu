@@ -1,12 +1,13 @@
 #[cfg(feature = "nats")]
 pub mod nats;
-pub mod twilight;
 
 use std::collections::BTreeMap;
 
 use async_trait::async_trait;
 use fuizu_protocol::{IdentifyAllowance, Request};
 use tokio::sync::{mpsc, oneshot};
+#[cfg(feature = "twilight")]
+use twilight_gateway_queue::Queue;
 
 #[derive(Debug, Clone)]
 pub struct Fuizu {
@@ -96,5 +97,12 @@ impl Fuizu {
         tokio::spawn(inner.actor(msg_rx));
 
         Self { tx: msg_tx }
+    }
+}
+
+#[cfg(feature = "twilight")]
+impl Queue for Fuizu {
+    fn enqueue(&self, id: u32) -> oneshot::Receiver<()> {
+        self.waiter(id)
     }
 }
