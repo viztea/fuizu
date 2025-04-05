@@ -10,7 +10,8 @@ use crate::Transport;
 pub struct NatsTransport {
     client: Client,
     request_subject: Subject,
-    inbox: Subscriber
+    inbox: Subscriber,
+    inbox_subject: Subject
 }
 
 #[derive(Debug, Error)]
@@ -26,15 +27,18 @@ pub enum NatsError {
 }
 
 impl NatsTransport {
-    pub async fn new<RS: ToSubject, I: ToString>(
-        client: Client, request_subject: RS, inbox: I
+    pub async fn new<RS: ToSubject, I: ToSubject>(
+        client: Client, request_subject: &RS, inbox_subject: &I
     ) -> Result<Self, SubscribeError> {
-        let inbox = client.subscribe(inbox.to_string()).await?;
+        let inbox_subject = inbox_subject.to_subject();
+
+        let inbox = client.subscribe(inbox_subject.clone()).await?;
 
         Ok(Self {
             client,
             request_subject: request_subject.to_subject(),
-            inbox
+            inbox,
+            inbox_subject
         })
     }
 }
@@ -47,7 +51,11 @@ impl Transport for NatsTransport {
     async fn send(&self, message: Request) -> Result<(), Self::Error> {
         let message = serde_json::to_vec(&message)?;
         self.client
-            .publish(self.request_subject.clone(), message.into())
+            .publish_with_reply(
+                self.request_subject.clone(),
+                self.inbox_subject.clone(),
+                message.into()
+            )
             .await?;
 
         Ok(())
