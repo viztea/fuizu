@@ -8,12 +8,12 @@ tokio = { version = "1.44", default-features = false, features = ["sync"] }
 futures-util = "0.3.30"
 tracing = "0.1"
 thiserror = "2"
+serde = { version = "1", features = ["derive"] }
 
 #
 fuizu-protocol = { path = "../fuizu-protocol" }
 
 # twilight
-twilight-model = { version = "0.16", optional = true }
 twilight-gateway-queue = { version = "0.16", optional = true, default-features = false }
 
 # nats
@@ -21,7 +21,7 @@ serde_json = "1.0.116"
 async-nats = "0.40"
 
 [features]
-twilight = ["twilight-gateway-queue", "twilight-model"]
+twilight = ["twilight-gateway-queue"]
 
 [lints]
 workspace = true

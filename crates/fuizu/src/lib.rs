@@ -6,12 +6,11 @@ use actor::{Fuizu, QueuedIdentify};
 use async_nats::Client;
 use async_nats::subject::ToSubject;
 use fuizu_protocol::Request;
+use serde::de::DeserializeOwned;
 use thiserror::Error;
 use tokio::sync::{mpsc, oneshot};
 #[cfg(feature = "twilight")]
 use twilight_gateway_queue::Queue;
-#[cfg(feature = "twilight")]
-use twilight_model::gateway::connection_info::BotConnectionInfo;
 
 #[derive(Debug, Clone)]
 pub struct FuizuClient {
@@ -70,10 +69,7 @@ impl FuizuClient {
     /// `/gateway/bot` Discord API endpoint. As the identify server already
     /// stores this info for itself, it can be retrieved without fear of
     /// running into API rate-limits or retrieving inaccurate information.
-    ///
-    /// This method is only available when the `twilight` feature is enabled.
-    #[cfg(feature = "twilight")]
-    pub async fn gateway_info(&self) -> Result<BotConnectionInfo, FuizuError> {
+    pub async fn gateway_info<G: DeserializeOwned>(&self) -> Result<G, FuizuError> {
         let payload =
             serde_json::to_vec(&Request::RetrieveGateway).map_err(FuizuError::Serialize)?;
 
@@ -83,7 +79,7 @@ impl FuizuClient {
             .request(self.inner.request_subject.clone(), payload.into())
             .await?;
 
-        let response: BotConnectionInfo =
+        let response: G =
             serde_json::from_slice(&response.payload).map_err(FuizuError::Deserialize)?;
 
         Ok(response)

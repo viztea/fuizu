@@ -512,12 +512,12 @@ dependencies = [
  "async-nats",
  "fuizu-protocol",
  "futures-util",
+ "serde",
  "serde_json",
  "thiserror 2.0.12",
  "tokio",
  "tracing",
  "twilight-gateway-queue",
- "twilight-model",
 ]
 
 [[package]]
