@@ -37,7 +37,7 @@ struct Settings {
     /// Time until the daily permits reset.
     reset_after: Duration,
     /// The number of permits to reset to.
-    total: u32
+    total: u32,
 }
 
 /// [`InMemoryQueue`]'s background task runner.
@@ -83,7 +83,7 @@ async fn runner(
                         let settings = Settings {
                             max_concurrency,
                             remaining,
-                            reset_after,
+                            reset_after: reset_at.deadline() - Instant::now(),
                             total
                         };
                         if channel.send(settings).is_err() {
@@ -256,7 +256,6 @@ impl InMemoryQueue {
             .expect("receiver dropped after sender");
 
         let settings = rx.await.expect("failed to receive settings");
-
         SessionStartLimit {
             max_concurrency: settings.max_concurrency,
             remaining: settings.remaining,
