@@ -1,107 +1,97 @@
-#[cfg(feature = "nats")]
-pub mod nats;
+pub mod actor;
 
-use std::collections::BTreeMap;
+use std::sync::Arc;
 
-use async_trait::async_trait;
-use fuizu_protocol::{IdentifyAllowance, Request};
+use actor::{Fuizu, QueuedIdentify};
+use async_nats::Client;
+use async_nats::subject::ToSubject;
+use fuizu_protocol::Request;
+use thiserror::Error;
 use tokio::sync::{mpsc, oneshot};
 #[cfg(feature = "twilight")]
 use twilight_gateway_queue::Queue;
+#[cfg(feature = "twilight")]
+use twilight_model::gateway::connection_info::BotConnectionInfo;
 
 #[derive(Debug, Clone)]
-pub struct Fuizu {
-    tx: mpsc::UnboundedSender<QueuedIdentify>
+pub struct FuizuClient {
+    tx: mpsc::UnboundedSender<QueuedIdentify>,
+    inner: Arc<Fuizu>
 }
 
-struct QueuedIdentify {
-    tx: oneshot::Sender<()>,
-    id: u32
+#[derive(Debug, Error)]
+pub enum FuizuError {
+    /// Failed to serialize the request
+    #[error("Failed to serialize request")]
+    Serialize(serde_json::Error),
+
+    /// Failed to send the request
+    #[error("Failed to send request")]
+    Send(#[from] async_nats::RequestError),
+
+    /// Failed to deserialize the response
+    #[error("Failed to deserialize response")]
+    Deserialize(serde_json::Error)
 }
 
-#[derive(Debug, Clone)]
-struct Inner<T: Transport> {
-    host_name: String,
-    transport: T
-}
+#[allow(clippy::needless_pass_by_value)]
+impl FuizuClient {
+    #[must_use]
+    pub fn new<RS: ToSubject, IS: ToSubject>(
+        host_name: String, client: Client, request_subject: RS, inbox_subject: IS
+    ) -> Self {
+        let fuizu = Fuizu {
+            host_name,
+            client,
+            request_subject: request_subject.to_subject(),
+            inbox_subject: inbox_subject.to_subject()
+        };
 
-#[async_trait]
-pub trait Transport: Send + Sync {
-    type Error: std::error::Error + Send + Sync;
+        let inner = Arc::new(fuizu);
 
-    /// Send an identification request.
-    async fn send(&self, message: Request) -> Result<(), Self::Error>;
+        let (msg_tx, msg_rx) = mpsc::unbounded_channel();
+        tokio::spawn(inner.clone().actor(msg_rx));
 
-    /// Receive an allowance message.
-    async fn recv(&mut self) -> Result<Option<IdentifyAllowance>, Self::Error>;
-}
-
-type RequestMap = BTreeMap<u32, oneshot::Sender<()>>;
-impl<T: Transport> Inner<T> {
-    async fn actor(mut self, mut rx: mpsc::UnboundedReceiver<QueuedIdentify>) {
-        let mut requests = RequestMap::new();
-        loop {
-            tokio::select! {
-                event = self.transport.recv() => Self::handle_allowance(event, &mut requests),
-                Some(request) = rx.recv() => self.handle_request(request, &mut requests).await,
-            }
-        }
+        Self { inner, tx: msg_tx }
     }
 
-    async fn handle_request(&self, request: QueuedIdentify, requests: &mut RequestMap) {
-        if let Err(err) = self
-            .transport
-            .send(Request::Identify { id: request.id, host_name: self.host_name.clone() })
-            .await
-        {
-            tracing::error!(%err, shard_id=request.id, "Failed to send identify request");
-            return;
-        }
-
-        requests.insert(request.id, request.tx);
-    }
-
-    fn handle_allowance(
-        message: Result<Option<IdentifyAllowance>, T::Error>, requests: &mut RequestMap
-    ) {
-        match message {
-            Ok(Some(request)) => {
-                if let Some(tx) = requests.remove(&request.id) {
-                    let _ = tx.send(());
-                }
-            }
-
-            Err(err) => {
-                tracing::error!(%err, "Failed to receive allowance");
-            }
-
-            _ => {}
-        }
-    }
-}
-
-impl Fuizu {
+    /// Retrieve a `oneshot::Receiver` that will be resolved when the IDENITFY
+    /// requst is allowed by the server.
     #[must_use]
     pub fn waiter(&self, id: u32) -> oneshot::Receiver<()> {
-        let (tx, rx) = oneshot::channel();
-        let _ = self.tx.send(QueuedIdentify { tx, id });
-
+        let (req, rx) = QueuedIdentify::new(id);
+        let _ = self.tx.send(req);
         rx
     }
 
-    #[must_use]
-    pub fn new<T: Transport + 'static>(host_name: String, transport: T) -> Self {
-        let inner = Inner { host_name, transport };
+    /// Retrieve the gateway information from the server.
+    ///
+    /// This method should be used instead of directly calling the
+    /// `/gateway/bot` Discord API endpoint. As the identify server already
+    /// stores this info for itself, it can be retrieved without fear of
+    /// running into API rate-limits or retrieving inaccurate information.
+    ///
+    /// This method is only available when the `twilight` feature is enabled.
+    #[cfg(feature = "twilight")]
+    pub async fn gateway_info(&self) -> Result<BotConnectionInfo, FuizuError> {
+        let payload =
+            serde_json::to_vec(&Request::RetrieveGateway).map_err(FuizuError::Serialize)?;
 
-        let (msg_tx, msg_rx) = mpsc::unbounded_channel();
-        tokio::spawn(inner.actor(msg_rx));
+        let response = self
+            .inner
+            .client
+            .request(self.inner.request_subject.clone(), payload.into())
+            .await?;
 
-        Self { tx: msg_tx }
+        let response: BotConnectionInfo =
+            serde_json::from_slice(&response.payload).map_err(FuizuError::Deserialize)?;
+
+        Ok(response)
     }
 }
 
 #[cfg(feature = "twilight")]
-impl Queue for Fuizu {
+impl Queue for FuizuClient {
     fn enqueue(&self, id: u32) -> oneshot::Receiver<()> {
         self.waiter(id)
     }
