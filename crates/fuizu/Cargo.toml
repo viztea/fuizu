@@ -18,7 +18,7 @@ twilight-gateway-queue = { version = "0.16", optional = true, default-features =
 
 # nats
 serde_json = "1.0.116"
-async-nats = "0.40"
+async-nats = { git = "https://github.com/eara-bot/nats.rs", branch = "eara" }
 
 [features]
 twilight = ["twilight-gateway-queue"]
