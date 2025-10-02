@@ -51,7 +51,7 @@ impl Fuizu {
     }
 
     async fn handle_request(&self, request: QueuedIdentify, requests: &mut RequestMap) {
-        let payload = Request::Identify { id: request.id, host_name: self.host_name.clone() };
+        let payload = Request::RequestIdentify { id: request.id, host_name: self.host_name.clone() };
 
         let payload = match serde_json::to_vec(&payload) {
             Ok(payload) => payload,

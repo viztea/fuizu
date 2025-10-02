@@ -40,7 +40,6 @@ tracing-subscriber = "0.3"
 
 twilight-model = "0.16"
 twilight-http = "0.16"
-twilight-gateway-queue = "0.16"
 
 [lints]
 workspace = true

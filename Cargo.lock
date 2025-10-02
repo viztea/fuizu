@@ -507,7 +507,7 @@ checksum = "42703706b716c37f96a77aea830392ad231f44c9e9a67872fa5548707e11b11c"
 
 [[package]]
 name = "fuizu"
-version = "0.1.0"
+version = "1.0.0"
 dependencies = [
  "async-nats",
  "fuizu-protocol",
@@ -540,7 +540,6 @@ dependencies = [
  "tokio",
  "tracing",
  "tracing-subscriber",
- "twilight-gateway-queue",
  "twilight-http",
  "twilight-model",
 ]

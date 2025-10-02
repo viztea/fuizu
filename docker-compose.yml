@@ -3,7 +3,7 @@ version: '3'
 services:
   nats:
     image: nats:latest
-    container_name: kuizu-nats
+    container_name: fuizu-nats
     restart: unless-stopped
     volumes:
       - ./nats_data:/nats_data
@@ -11,9 +11,9 @@ services:
       - "4222:4222"
       - "8222:8222"
       - "6222:6222"
-  kuizu-server:
-    image: harbor.keia.one/kuizu/server:latest
-    container_name: kuizu-server
+  fuizu-server:
+    image: harbor.keia.one/fuizu/server:latest
+    container_name: fuizu-server
     restart: unless-stopped
     environment:
       # Endpoint for NATS url
@@ -22,6 +22,6 @@ services:
       # - GATEWAY_HTTP_PROXY_URL=
       - GATEWAY_QUEUE_TOKEN=discord token here
       # NATS subject to listen for identify requests on
-      - GATEWAY_QUEUE_SUBJECT_REQUESTS=kuizu.requests
+      - GATEWAY_QUEUE_SUBJECT_REQUESTS=fuizu.requests
       # Interval in which to update session start limit (seconds)
       - GATEWAY_QUEUE_UPDATE_INTERVAL=43200
