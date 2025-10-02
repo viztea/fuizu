@@ -1,5 +1,5 @@
 #![feature(impl_trait_in_assoc_type)]
-mod in_memory;
+mod queue;
 
 use std::pin::Pin;
 
@@ -7,17 +7,16 @@ use async_nats::Message;
 use color_eyre::eyre::Result;
 use fuizu_protocol::{IdentifyAllowance, Request};
 use futures_util::StreamExt;
-use nats_util::{send, NatsCoreClient};
+use nats_util::{NatsCoreClient, send};
 use tokio::spawn;
 use tokio::sync::oneshot;
 use tokio::task::{JoinHandle, JoinSet};
 use tokio::time::{Duration, Instant, Sleep};
-use twilight_gateway_queue::Queue;
 use twilight_http::Client;
 use twilight_http::client::ClientBuilder;
 use twilight_model::gateway::connection_info::BotConnectionInfo;
 
-use crate::in_memory::InMemoryQueue;
+use crate::queue::Queue;
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -67,7 +66,7 @@ struct Inner {
     /// start limits.
     queue_update_interval: Option<Duration>,
     /// Queue for identifying shards.
-    queue: InMemoryQueue,
+    queue: Queue,
     /// Discord API client.
     client: Client,
     /// Current session start limit.
@@ -157,9 +156,6 @@ impl Inner {
 
         tracing::error!("Subscription for identify requests ended abruptly.");
 
-        // wait for all allowances to be sent.
-        allowances.join_all().await;
-
         Ok(())
     }
 
@@ -176,13 +172,8 @@ impl Inner {
         Ok(())
     }
 
-    async fn handle_identify_request(&self, request: &Message, join_set: &mut JoinSet<()>) {
-        let Some(requester) = request.reply.clone() else {
-            tracing::error!("Received identify request without reply subject");
-            return;
-        };
-
-        let request = match serde_json::from_slice::<Request>(&request.payload) {
+    async fn handle_identify_request(&self, message: &Message, join_set: &mut JoinSet<()>) {
+        let request = match serde_json::from_slice::<Request>(&message.payload) {
             Ok(request) => request,
             Err(err) => {
                 tracing::error!(%err, "Failed to parse Fuizu request");
@@ -192,35 +183,59 @@ impl Inner {
 
         match request {
             Request::RetrieveGateway => {
+                let Some(requester) = message.reply.clone() else {
+                    tracing::error!("Received request without reply subject");
+                    return;
+                };
+
                 let gateway = BotConnectionInfo {
                     session_start_limit: self.queue.get_current().await,
                     shards: self.current_gateway.shards,
                     url: self.current_gateway.url.clone()
                 };
 
-                if let Err(err) = send(&self.nats, requester.clone(), &gateway).await  {
+                if let Err(err) = send(&self.nats, requester.clone(), &gateway).await {
                     tracing::error!(%err, %requester, "--- IDENTIFY: failed to send gateway info");
                 } else {
                     tracing::info!(%requester, "--- IDENTIFY: sent gateway info");
-                } 
-            },
+                }
+            }
+            Request::RequestIdentify { id: shard_id, host_name } => {
+                let Some(requester) = message.reply.clone() else {
+                    tracing::error!("Received request without reply subject");
+                    return;
+                };
 
-            Request::Identify { id: shard_id, host_name } => {
-                tracing::info!(shard_id, requester=host_name, ">>> IDENTIFY: received identify request for shard");
+                tracing::info!(
+                    shard_id,
+                    requester = host_name,
+                    ">>> IDENTIFY: received identify request for shard"
+                );
 
                 let shard = self.queue.enqueue(shard_id);
                 join_set.spawn({
                     let nats = self.nats.clone();
                     async move {
-                        let _ = shard.await;
-                        tracing::info!(shard_id, %requester, host_name, "<<< IDENTIFY: sending identify allowance for shard");
-        
-                        if let Err(err) = send(&nats, requester.clone(), &IdentifyAllowance { id: shard_id }).await {
+                        let Ok(allowed) = shard.await else {
+                            return;
+                        };
+
+                        if allowed {
+                            tracing::info!(shard_id, %requester, host_name, "<<< IDENTIFY: sending identify allowance for shard");
+                        } else {
+                            tracing::info!(shard_id, %requester, host_name, "--- IDENTIFY: shard identify was canceled");
+                        }
+
+                        if let Err(err) = send(&nats, requester.clone(), &IdentifyAllowance { id: shard_id, canceled: !allowed }).await {
                             tracing::error!(%err, shard_id, %requester, host_name, "--- IDENTIFY: failed to publish identify allowance");
-                        }          
+                        }
                     }
                 });
-            },
+            }
+            Request::CancelIdentify { id, host_name } => {
+                tracing::info!(shard_id=id, host_name, ">>> IDENTIFY: received cancel identify request");
+                self.queue.dequeue(id);
+            }
         }
     }
 }
@@ -241,7 +256,7 @@ impl EaraIdentifyServer {
             initial_gateway.session_start_limit
         );
 
-        let queue = InMemoryQueue::new(
+        let queue = Queue::new(
             initial_gateway.session_start_limit.max_concurrency,
             initial_gateway.session_start_limit.remaining,
             Duration::from_millis(initial_gateway.session_start_limit.reset_after),

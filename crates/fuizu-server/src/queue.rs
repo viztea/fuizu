@@ -7,10 +7,16 @@ use std::iter;
 use tokio::sync::{mpsc, oneshot};
 use tokio::task::yield_now;
 use tokio::time::{Duration, Instant, sleep_until};
-use twilight_gateway_queue::{IDENTIFY_DELAY, LIMIT_PERIOD, Queue};
 use twilight_model::gateway::SessionStartLimit;
 
-/// Possible messages from the [`InMemoryQueue`] to the [`runner`].
+/// Period between buckets.
+pub const IDENTIFY_DELAY: Duration = Duration::from_secs(5);
+
+/// Duration from the first identify until the remaining count resets to the
+/// total count.
+pub const LIMIT_PERIOD: Duration = Duration::from_secs(60 * 60 * 24);
+
+/// Possible messages from the [`Queue`] to the [`runner`].
 #[derive(Debug)]
 enum Message {
     /// Request a permit.
@@ -18,8 +24,10 @@ enum Message {
         /// For this shard.
         shard: u32,
         /// Indicate readiness through this sender.
-        tx: oneshot::Sender<()>
+        tx: oneshot::Sender<bool>
     },
+    /// Cancel a permit.
+    Cancel(u32),
     /// Update the runner's settings.
     Update(Settings),
     /// Retrieve the runner's settings.
@@ -37,10 +45,10 @@ struct Settings {
     /// Time until the daily permits reset.
     reset_after: Duration,
     /// The number of permits to reset to.
-    total: u32,
+    total: u32
 }
 
-/// [`InMemoryQueue`]'s background task runner.
+/// [`Queue`]'s background task runner.
 ///
 /// Buckets requests such that only one timer is necessary.
 async fn runner(
@@ -56,6 +64,7 @@ async fn runner(
         let now = Instant::now();
         (sleep_until(now), sleep_until(now + reset_after))
     };
+
     tokio::pin!(interval, reset_at);
 
     let mut queues = iter::repeat_with(VecDeque::new)
@@ -73,11 +82,28 @@ async fn runner(
                 match message {
                     Some(Message::Request { shard, tx }) => {
                         if queues.is_empty() {
-                            _ = tx.send(());
-                        } else {
-                            let key = shard as usize % queues.len();
-                            queues[key].push_back((shard, tx));
+                            _ = tx.send(true);
+                            continue;
                         }
+
+                        queues[shard as usize % queues.len()].push_back((shard, tx));
+                    }
+                    Some(Message::Cancel(shard)) => {
+                        if queues.is_empty() {
+                            continue;
+                        }
+
+                        let queue = &mut queues[shard as usize % queues.len()];
+
+                        let Some(idx) = queue.iter().position(|(s, _)| *s == shard) else {
+                            continue;
+                        };
+
+                        let (_, tx) = queue.remove(idx).expect("cannot fail");
+
+                        let _ = tx.send(false);
+
+                        tracing::debug!(shard, "cancelled");
                     }
                     Some(Message::GetSettings(channel)) => {
                         let settings = Settings {
@@ -86,6 +112,7 @@ async fn runner(
                             reset_after: reset_at.deadline() - Instant::now(),
                             total
                         };
+
                         if channel.send(settings).is_err() {
                             tracing::warn!("failed to send settings");
                         }
@@ -140,12 +167,13 @@ async fn runner(
                     }
 
                     while let Some((shard, tx)) = queue.pop_front() {
-                        if tx.send(()).is_err() {
+                        if tx.send(true).is_err() {
                             continue;
                         }
 
                         tracing::debug!(parent: &span, key, shard);
                         remaining -= 1;
+
                         // Reschedule behind shard for ordering correctness.
                         yield_now().await;
 
@@ -160,7 +188,7 @@ async fn runner(
 /// Memory based [`Queue`] implementation backed by an efficient background
 /// task.
 ///
-/// [`InMemoryQueue::update`] allows for dynamically changing the queue's
+/// [`Queue::update`] allows for dynamically changing the queue's
 /// settings.
 ///
 /// Cloning the queue is cheap and just increments a reference counter.
@@ -168,15 +196,15 @@ async fn runner(
 /// **Note:** A `max_concurrency` of `0` processes all requests instantly,
 /// effectively disabling the queue.
 #[derive(Clone, Debug)]
-pub struct InMemoryQueue {
+pub struct Queue {
     /// Sender to communicate with the background [task runner].
     ///
     /// [task runner]: runner
     tx: mpsc::UnboundedSender<Message>
 }
 
-impl InMemoryQueue {
-    /// Creates a new `InMemoryQueue` with custom settings.
+impl Queue {
+    /// Creates a new `Queue` with custom settings.
     ///
     /// # Panics
     ///
@@ -200,7 +228,7 @@ impl InMemoryQueue {
     /// # Example
     ///
     /// ```no_run
-    /// # use twilight_gateway_queue::InMemoryQueue;
+    /// # use twilight_gateway_queue::Queue;
     /// # let rt = tokio::runtime::Builder::new_current_thread()
     /// #     .enable_time()
     /// #     .build()
@@ -210,7 +238,7 @@ impl InMemoryQueue {
     /// use twilight_http::Client;
     ///
     /// # rt.block_on(async {
-    /// # let queue = InMemoryQueue::default();
+    /// # let queue = Queue::default();
     /// # let token = String::new();
     /// let client = Client::new(token);
     /// let session = client
@@ -263,10 +291,26 @@ impl InMemoryQueue {
             total: settings.total
         }
     }
+
+    pub fn dequeue(&self, shard: u32) {
+        self.tx
+            .send(Message::Cancel(shard))
+            .expect("receiver dropped after sender");
+    }
+
+    pub fn enqueue(&self, shard: u32) -> oneshot::Receiver<bool> {
+        let (tx, rx) = oneshot::channel();
+
+        self.tx
+            .send(Message::Request { shard, tx })
+            .expect("receiver dropped after sender");
+
+        rx
+    }
 }
 
-impl Default for InMemoryQueue {
-    /// Creates a new `InMemoryQueue` with Discord's default settings.
+impl Default for Queue {
+    /// Creates a new `Queue` with Discord's default settings.
     ///
     /// Currently these are:
     ///
@@ -276,17 +320,5 @@ impl Default for InMemoryQueue {
     /// * `total`: 1000.
     fn default() -> Self {
         Self::new(1, 1000, LIMIT_PERIOD, 1000)
-    }
-}
-
-impl Queue for InMemoryQueue {
-    fn enqueue(&self, shard: u32) -> oneshot::Receiver<()> {
-        let (tx, rx) = oneshot::channel();
-
-        self.tx
-            .send(Message::Request { shard, tx })
-            .expect("receiver dropped after sender");
-
-        rx
     }
 }
