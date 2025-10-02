@@ -7,19 +7,19 @@ edition = "2024"
 color-eyre = "0.6.3"
 nats-util = { path = "../nats-util" }
 
-async-nats = { version = "0.40", default-features = false, features = [
-    "server_2_10",
-    "server_2_11",
-    "aws-lc-rs",
+async-nats = { version = "0.44", default-features = false, features = [
+  "server_2_10",
+  "server_2_11",
+  "aws-lc-rs",
 ] }
 
 ####### async/await
 
 tokio = { version = "1.44", features = [
-    "rt",
-    "sync",
-    "rt-multi-thread",
-    "signal",
+  "rt",
+  "sync",
+  "rt-multi-thread",
+  "signal",
 ] }
 futures-util = "0.3.30"
 
